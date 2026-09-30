@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 class TableColumnSpec<T> {
   final String label;
   final String? sortField;
+  final String? fieldKey;
   final bool numeric;
   final Widget Function(T item) build;
 
@@ -10,6 +11,7 @@ class TableColumnSpec<T> {
     required this.label,
     required this.build,
     this.sortField,
+    this.fieldKey,
     this.numeric = false,
   });
 }

@@ -1,55 +1,85 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:provider/provider.dart';
 
-import '../models/drug_query.dart';
-import '../models/supplier_query.dart';
-import '../screens/drug_detail_screen.dart';
-import '../screens/drug_list_screen.dart';
-import '../screens/supplier_detail_screen.dart';
-import '../screens/supplier_list_screen.dart';
+import 'form_leave_guard.dart';
+import '../models/catalog_item.dart';
+import '../models/catalog_query.dart';
+import '../screens/catalog_detail_screen.dart';
+import '../screens/catalog_form_screen.dart';
+import '../screens/catalog_list_screen.dart';
+
+EntityKind? kindFromPath(String? path) {
+  for (final kind in EntityKind.values) {
+    if (kind.path == path) return kind;
+  }
+  return null;
+}
 
 final appRouter = GoRouter(
   initialLocation: '/drugs',
   routes: [
     GoRoute(path: '/', redirect: (_, _) => '/drugs'),
     GoRoute(
-      path: '/drugs',
-      builder: (context, state) => DrugListScreen(
-        query: DrugQuery.fromParameters(state.uri.queryParameters),
-      ),
+      path: '/:kind',
+      builder: (context, state) {
+        final kind = kindFromPath(state.pathParameters['kind']);
+        if (kind == null) return const _UnknownPage();
+        return CatalogListScreen(
+          kind: kind,
+          query: CatalogQuery.fromParameters(state.uri.queryParameters),
+        );
+      },
       routes: [
         GoRoute(
-          path: ':id',
-          builder: (context, state) => DrugDetailScreen(
-            id: int.tryParse(state.pathParameters['id'] ?? '') ?? -1,
-          ),
+          path: 'new',
+          builder: (context, state) {
+            final kind = kindFromPath(state.pathParameters['kind']);
+            return kind == null
+                ? const _UnknownPage()
+                : CatalogFormScreen(kind: kind);
+          },
+          onExit: (context, state) => context.read<FormLeaveGuard>().confirm(),
         ),
-      ],
-    ),
-    GoRoute(
-      path: '/suppliers',
-      builder: (context, state) => SupplierListScreen(
-        query: SupplierQuery.fromParameters(state.uri.queryParameters),
-      ),
-      routes: [
         GoRoute(
           path: ':id',
-          builder: (context, state) => SupplierDetailScreen(
-            id: int.tryParse(state.pathParameters['id'] ?? '') ?? -1,
-          ),
+          builder: (context, state) {
+            final kind = kindFromPath(state.pathParameters['kind']);
+            final id = int.tryParse(state.pathParameters['id'] ?? '');
+            return kind == null || id == null
+                ? const _UnknownPage()
+                : CatalogDetailScreen(kind: kind, id: id);
+          },
+          routes: [
+            GoRoute(
+              path: 'edit',
+              builder: (context, state) {
+                final kind = kindFromPath(state.pathParameters['kind']);
+                final id = int.tryParse(state.pathParameters['id'] ?? '');
+                return kind == null || id == null
+                    ? const _UnknownPage()
+                    : CatalogFormScreen(kind: kind, id: id);
+              },
+              onExit: (context, state) =>
+                  context.read<FormLeaveGuard>().confirm(),
+            ),
+          ],
         ),
       ],
     ),
   ],
-  errorBuilder: (context, state) => Scaffold(
+  errorBuilder: (context, state) => const _UnknownPage(),
+);
+
+class _UnknownPage extends StatelessWidget {
+  const _UnknownPage();
+  @override
+  Widget build(BuildContext context) => Scaffold(
     body: Center(
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Icon(Icons.link_off, size: 48),
-          const SizedBox(height: 12),
-          Text('Страница не найдена: ${state.uri.path}'),
-          const SizedBox(height: 12),
+          const Text('Страница не найдена'),
           FilledButton(
             onPressed: () => context.go('/drugs'),
             child: const Text('К препаратам'),
@@ -57,5 +87,5 @@ final appRouter = GoRouter(
         ],
       ),
     ),
-  ),
-);
+  );
+}
