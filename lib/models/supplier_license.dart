@@ -67,7 +67,7 @@ class SupplierLicense implements CatalogItem {
   factory SupplierLicense.fromJson(Map<String, dynamic> json) =>
       SupplierLicense(
         id: jsonInt(json['id']),
-        supplierId: jsonInt(json['supplierId']),
+        supplierId: jsonRelatedId(json['supplierId'], json['supplier']),
         number: jsonString(json['number']),
         issuedYear: jsonInt(json['issuedYear']),
         expiresYear: jsonInt(json['expiresYear']),

@@ -98,7 +98,10 @@ class Supplier implements CatalogItem {
     phone: jsonString(json['phone']),
     email: jsonString(json['email']),
     partnershipYear: jsonInt(json['partnershipYear']),
-    manufacturerIds: jsonIds(json['manufacturerIds']),
+    manufacturerIds: jsonRelatedIds(
+      json['manufacturerIds'],
+      json['manufacturers'],
+    ),
     deletedAt: jsonDate(json['deletedAt']),
   );
 }

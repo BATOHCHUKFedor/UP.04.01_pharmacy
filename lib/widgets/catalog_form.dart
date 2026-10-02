@@ -118,7 +118,7 @@ class CatalogForm extends StatelessWidget {
             .toList(),
         validator: (value) =>
             serverErrors[spec.key] ?? Validators.requiredId(value),
-        onChanged: (value) => onChanged(spec.key, value),
+        onChanged: saving ? null : (value) => onChanged(spec.key, value),
       );
     }
     if (spec.kind == CatalogInputKind.multiSelect) {
@@ -144,12 +144,14 @@ class CatalogForm extends StatelessWidget {
               return FilterChip(
                 label: Text(item.title),
                 selected: selected,
-                onSelected: (select) {
-                  final next = [...?state.value];
-                  select ? next.add(item.id) : next.remove(item.id);
-                  state.didChange(next);
-                  onChanged(spec.key, next);
-                },
+                onSelected: saving
+                    ? null
+                    : (select) {
+                        final next = [...?state.value];
+                        select ? next.add(item.id) : next.remove(item.id);
+                        state.didChange(next);
+                        onChanged(spec.key, next);
+                      },
               );
             }).toList(),
           ),
@@ -157,6 +159,7 @@ class CatalogForm extends StatelessWidget {
       );
     }
     return TextFormField(
+      enabled: !saving,
       controller: controllers[spec.key],
       decoration: InputDecoration(
         labelText: spec.label,

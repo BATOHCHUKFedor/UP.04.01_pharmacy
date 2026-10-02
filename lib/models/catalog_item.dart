@@ -39,3 +39,18 @@ DateTime? jsonDate(Object? value) =>
 List<int> jsonIds(Object? value) => value is List
     ? value.map((item) => jsonInt(item, -1)).where((id) => id > 0).toList()
     : <int>[];
+
+int jsonRelatedId(Object? id, Object? object) => id != null
+    ? jsonInt(id)
+    : object is Map
+    ? jsonInt(object['id'])
+    : 0;
+List<int> jsonRelatedIds(Object? ids, Object? objects) => ids != null
+    ? jsonIds(ids)
+    : objects is List
+    ? objects
+          .whereType<Map>()
+          .map((item) => jsonInt(item['id']))
+          .where((id) => id > 0)
+          .toList()
+    : <int>[];

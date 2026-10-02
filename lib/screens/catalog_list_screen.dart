@@ -12,6 +12,7 @@ import '../models/manufacturer.dart';
 import '../models/supplier.dart';
 import '../models/supplier_license.dart';
 import '../state/catalog_store.dart';
+import '../state/load_status.dart';
 import '../widgets/app_scaffold.dart';
 import '../widgets/confirm_dialog.dart';
 import '../widgets/entity_card_list.dart';
@@ -50,6 +51,7 @@ class _CatalogListScreenState extends State<CatalogListScreen> {
   void didUpdateWidget(covariant CatalogListScreen oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.kind != widget.kind || oldWidget.query != widget.query) {
+      _debounce?.cancel();
       _sync(_search, widget.query.search);
       _sync(_yearFrom, widget.query.yearFrom?.toString() ?? '');
       _sync(_yearTo, widget.query.yearTo?.toString() ?? '');
@@ -82,6 +84,13 @@ class _CatalogListScreenState extends State<CatalogListScreen> {
 
   void _navigate(CatalogQuery query) {
     _debounce?.cancel();
+    if (CatalogQuery.fromParameters(query.toParameters()) == widget.query) {
+      final store = context.read<CatalogStore>();
+      if (store.list(widget.kind).status == LoadStatus.idle) {
+        store.applyQuery(widget.kind, widget.query, force: true);
+      }
+      return;
+    }
     context.go(
       Uri(
         path: '/${widget.kind.path}',
@@ -92,6 +101,7 @@ class _CatalogListScreenState extends State<CatalogListScreen> {
 
   void _debounced(CatalogQuery Function() query) {
     _debounce?.cancel();
+    context.read<CatalogStore>().cancelList(widget.kind);
     _debounce = Timer(const Duration(milliseconds: 400), () {
       if (mounted) _navigate(query());
     });

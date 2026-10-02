@@ -9,6 +9,7 @@ import '../models/manufacturer.dart';
 import '../models/supplier.dart';
 import '../models/supplier_license.dart';
 import '../state/catalog_store.dart';
+import '../core/validators.dart';
 import '../widgets/app_scaffold.dart';
 import '../widgets/confirm_dialog.dart';
 import '../widgets/detail_field.dart';
@@ -24,6 +25,7 @@ class CatalogDetailScreen extends StatefulWidget {
 }
 
 class _CatalogDetailScreenState extends State<CatalogDetailScreen> {
+  bool _dispensing = false;
   EntityKind get kind => widget.kind;
   int get id => widget.id;
 
@@ -99,6 +101,16 @@ class _CatalogDetailScreenState extends State<CatalogDetailScreen> {
                               spacing: 8,
                               runSpacing: 8,
                               children: [
+                                if (item is Drug && !item.isDeleted)
+                                  FilledButton.tonalIcon(
+                                    onPressed: _dispensing
+                                        ? null
+                                        : () => _dispense(store),
+                                    icon: const Icon(Icons.medication_outlined),
+                                    label: Text(
+                                      _dispensing ? 'Отпускаем…' : 'Отпустить',
+                                    ),
+                                  ),
                                 if (!item.isDeleted)
                                   OutlinedButton.icon(
                                     onPressed: () =>
@@ -249,9 +261,7 @@ class _CatalogDetailScreenState extends State<CatalogDetailScreen> {
     try {
       if (hard) {
         await store.hardDelete(kind, id);
-        if (context.mounted) {
-          context.go('/${kind.path}');
-        }
+        if (context.mounted) context.go('/${kind.path}');
       } else {
         await store.softDelete(kind, id);
       }
@@ -263,4 +273,77 @@ class _CatalogDetailScreenState extends State<CatalogDetailScreen> {
       }
     }
   }
+
+  Future<void> _dispense(CatalogStore store) async {
+    if (_dispensing) return;
+    final quantity = await showDialog<int>(
+      context: context,
+      builder: (_) => const _DispenseDialog(),
+    );
+    if (quantity == null || !mounted) return;
+    setState(() => _dispensing = true);
+    try {
+      await store.dispenseDrug(id, quantity);
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Отпущено упаковок: $quantity')));
+      }
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('$error')));
+      }
+    } finally {
+      if (mounted) setState(() => _dispensing = false);
+    }
+  }
+}
+
+class _DispenseDialog extends StatefulWidget {
+  const _DispenseDialog();
+
+  @override
+  State<_DispenseDialog> createState() => _DispenseDialogState();
+}
+
+class _DispenseDialogState extends State<_DispenseDialog> {
+  final _controller = TextEditingController(text: '1');
+  final _formKey = GlobalKey<FormState>();
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => AlertDialog(
+    title: const Text('Отпустить препарат'),
+    content: Form(
+      key: _formKey,
+      child: TextFormField(
+        controller: _controller,
+        autofocus: true,
+        keyboardType: TextInputType.number,
+        decoration: const InputDecoration(labelText: 'Количество упаковок'),
+        validator: Validators.integer(min: 1, max: 1000000),
+      ),
+    ),
+    actions: [
+      TextButton(
+        onPressed: () => Navigator.pop(context),
+        child: const Text('Отмена'),
+      ),
+      FilledButton(
+        onPressed: () {
+          if (_formKey.currentState!.validate()) {
+            Navigator.pop(context, int.parse(_controller.text));
+          }
+        },
+        child: const Text('Отпустить'),
+      ),
+    ],
+  );
 }

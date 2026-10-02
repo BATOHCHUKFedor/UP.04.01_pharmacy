@@ -101,12 +101,12 @@ class Drug implements CatalogItem {
     id: jsonInt(json['id']),
     name: jsonString(json['name']),
     registrationNumber: jsonString(json['registrationNumber']),
-    categoryIds: jsonIds(json['categoryIds']),
-    manufacturerId: jsonInt(json['manufacturerId']),
+    categoryIds: jsonRelatedIds(json['categoryIds'], json['categories']),
+    manufacturerId: jsonRelatedId(json['manufacturerId'], json['manufacturer']),
     productionYear: jsonInt(json['productionYear']),
     price: jsonDouble(json['price']),
     stock: jsonInt(json['stock']),
-    supplierId: jsonInt(json['supplierId']),
+    supplierId: jsonRelatedId(json['supplierId'], json['supplier']),
     deletedAt: jsonDate(json['deletedAt']),
   );
 }

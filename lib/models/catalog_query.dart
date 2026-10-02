@@ -12,6 +12,8 @@ class CatalogQuery {
   final int page;
   final int size;
   final bool includeDeleted;
+  final int? debugFail;
+  final int? debugDelay;
 
   const CatalogQuery({
     this.search = '',
@@ -27,6 +29,8 @@ class CatalogQuery {
     this.page = 1,
     this.size = 10,
     this.includeDeleted = false,
+    this.debugFail,
+    this.debugDelay,
   });
 
   factory CatalogQuery.fromParameters(Map<String, String> p) {
@@ -61,6 +65,8 @@ class CatalogQuery {
       page: page != null && page > 0 ? page : 1,
       size: const {10, 25, 50}.contains(size) ? size! : 10,
       includeDeleted: p['includeDeleted'] == 'true',
+      debugFail: int.tryParse(p['__fail'] ?? ''),
+      debugDelay: int.tryParse(p['__delay'] ?? ''),
     );
   }
 
@@ -78,6 +84,8 @@ class CatalogQuery {
     int? page,
     int? size,
     bool? includeDeleted,
+    Object? debugFail = _unset,
+    Object? debugDelay = _unset,
   }) => CatalogQuery(
     search: search ?? this.search,
     categoryId: categoryId == _unset ? this.categoryId : categoryId as int?,
@@ -94,6 +102,8 @@ class CatalogQuery {
     page: page ?? 1,
     size: size ?? this.size,
     includeDeleted: includeDeleted ?? this.includeDeleted,
+    debugFail: debugFail == _unset ? this.debugFail : debugFail as int?,
+    debugDelay: debugDelay == _unset ? this.debugDelay : debugDelay as int?,
   );
 
   Map<String, String> toParameters() => {
@@ -110,6 +120,8 @@ class CatalogQuery {
     if (page != 1) 'page': '$page',
     if (size != 10) 'size': '$size',
     if (includeDeleted) 'includeDeleted': 'true',
+    if (debugFail != null) '__fail': '$debugFail',
+    if (debugDelay != null) '__delay': '$debugDelay',
   };
 
   @override
@@ -127,7 +139,9 @@ class CatalogQuery {
       ascending == other.ascending &&
       page == other.page &&
       size == other.size &&
-      includeDeleted == other.includeDeleted;
+      includeDeleted == other.includeDeleted &&
+      debugFail == other.debugFail &&
+      debugDelay == other.debugDelay;
   @override
   int get hashCode => Object.hashAll([
     search,
@@ -143,6 +157,8 @@ class CatalogQuery {
     page,
     size,
     includeDeleted,
+    debugFail,
+    debugDelay,
   ]);
   static const _unset = Object();
 }

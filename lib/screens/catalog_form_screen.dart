@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
 import '../core/form_leave_guard.dart';
+import '../core/api_exceptions.dart';
 import '../core/validators.dart';
 import '../models/catalog_item.dart';
 import '../models/category.dart';
@@ -12,6 +13,8 @@ import '../models/supplier.dart';
 import '../models/supplier_license.dart';
 import '../repositories/catalog_repository.dart';
 import '../state/catalog_store.dart';
+import '../state/load_status.dart';
+import '../widgets/screen_state_view.dart';
 import '../widgets/catalog_form.dart';
 import '../widgets/confirm_dialog.dart';
 
@@ -32,6 +35,8 @@ class _CatalogFormScreenState extends State<CatalogFormScreen> {
   bool _allowPop = false;
   bool _saving = false;
   bool _hasSubmitted = false;
+  LoadStatus _loadStatus = LoadStatus.loading;
+  String? _loadError;
   late final FormLeaveGuard _leaveGuard;
   late final Future<bool> Function() _exitCheck;
   CatalogItem? _original;
@@ -43,24 +48,51 @@ class _CatalogFormScreenState extends State<CatalogFormScreen> {
     _leaveGuard = context.read<FormLeaveGuard>();
     _exitCheck = _confirmExit;
     _leaveGuard.attach(_exitCheck);
+    _loadForm();
+  }
+
+  Future<void> _loadForm() async {
+    setState(() {
+      _loadStatus = LoadStatus.loading;
+      _loadError = null;
+    });
     final store = context.read<CatalogStore>();
-    _original = widget.id == null ? null : store.byId(widget.kind, widget.id!);
-    if (_original is Supplier) {
-      _originalLicense = store
-          .options(EntityKind.licenses, includeDeleted: true)
-          .cast<SupplierLicense>()
-          .where((license) => license.supplierId == widget.id)
-          .firstOrNull;
-    }
-    _values.addAll(_initialValues());
-    for (final spec in _specs) {
-      if (spec.kind == CatalogInputKind.select ||
-          spec.kind == CatalogInputKind.multiSelect) {
-        continue;
+    try {
+      await store.prepareForm(widget.kind, widget.id);
+      if (!mounted) return;
+      _original = widget.id == null
+          ? null
+          : store.byId(widget.kind, widget.id!);
+      if (_original is Supplier) {
+        _originalLicense = store
+            .options(EntityKind.licenses, includeDeleted: true)
+            .cast<SupplierLicense>()
+            .where((license) => license.supplierId == widget.id)
+            .firstOrNull;
       }
-      _controllers[spec.key] = TextEditingController(
-        text: _values[spec.key]?.toString() ?? '',
-      );
+      _values.clear();
+      _values.addAll(_initialValues());
+      for (final controller in _controllers.values) {
+        controller.dispose();
+      }
+      _controllers.clear();
+      for (final spec in _specs) {
+        if (spec.kind == CatalogInputKind.select ||
+            spec.kind == CatalogInputKind.multiSelect) {
+          continue;
+        }
+        _controllers[spec.key] = TextEditingController(
+          text: _values[spec.key]?.toString() ?? '',
+        );
+      }
+      setState(() => _loadStatus = LoadStatus.success);
+    } catch (error) {
+      if (mounted) {
+        setState(() {
+          _loadStatus = LoadStatus.error;
+          _loadError = '$error';
+        });
+      }
     }
   }
 
@@ -157,7 +189,7 @@ class _CatalogFormScreenState extends State<CatalogFormScreen> {
         key: 'stock',
         label: 'Количество упаковок',
         kind: CatalogInputKind.integer,
-        validator: Validators.integer(min: 1, max: 1000000),
+        validator: Validators.integer(min: 0, max: 1000000),
       ),
     ],
     EntityKind.suppliers => [
@@ -372,6 +404,7 @@ class _CatalogFormScreenState extends State<CatalogFormScreen> {
   };
 
   Future<void> _submit() async {
+    if (_saving) return;
     setState(() {
       _serverErrors.clear();
       _hasSubmitted = true;
@@ -415,6 +448,10 @@ class _CatalogFormScreenState extends State<CatalogFormScreen> {
         _allowPop = true;
       });
       context.go('/${widget.kind.path}/${saved.id}');
+    } on ValidationException catch (error) {
+      if (!mounted) return;
+      setState(() => _serverErrors.addAll(error.errors));
+      _formKey.currentState!.validate();
     } on FieldIssue catch (error) {
       if (!mounted) return;
       setState(() {
@@ -428,6 +465,8 @@ class _CatalogFormScreenState extends State<CatalogFormScreen> {
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text('Не удалось сохранить: $error')));
+    } finally {
+      if (mounted) setState(() => _saving = false);
     }
   }
 
@@ -461,9 +500,6 @@ class _CatalogFormScreenState extends State<CatalogFormScreen> {
 
   @override
   Widget build(BuildContext context) {
-    if (widget.id != null && _original == null) {
-      return const Scaffold(body: Center(child: Text('Запись не найдена')));
-    }
     return PopScope(
       canPop: _allowPop || !_dirty,
       onPopInvokedWithResult: (didPop, _) {
@@ -482,25 +518,32 @@ class _CatalogFormScreenState extends State<CatalogFormScreen> {
                 : 'Изменить: ${widget.kind.singular}',
           ),
         ),
-        body: SingleChildScrollView(
-          padding: const EdgeInsets.all(16),
-          child: Center(
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 720),
-              child: Card(
-                child: Padding(
-                  padding: const EdgeInsets.all(20),
-                  child: CatalogForm(
-                    formKey: _formKey,
-                    fields: _specs,
-                    values: _values,
-                    controllers: _controllers,
-                    serverErrors: _serverErrors,
-                    optionsOf: _options,
-                    onChanged: _onChanged,
-                    onSubmit: _submit,
-                    saving: _saving,
-                    validateOnInteraction: _hasSubmitted,
+        body: ScreenStateView(
+          status: _loadStatus,
+          error: _loadError,
+          isEmpty: widget.id != null && _original == null,
+          emptyMessage: 'Запись не найдена',
+          onRetry: _loadForm,
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(16),
+            child: Center(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 720),
+                child: Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(20),
+                    child: CatalogForm(
+                      formKey: _formKey,
+                      fields: _specs,
+                      values: _values,
+                      controllers: _controllers,
+                      serverErrors: _serverErrors,
+                      optionsOf: _options,
+                      onChanged: _onChanged,
+                      onSubmit: _submit,
+                      saving: _saving,
+                      validateOnInteraction: _hasSubmitted,
+                    ),
                   ),
                 ),
               ),

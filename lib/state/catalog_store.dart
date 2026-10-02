@@ -7,6 +7,9 @@ import '../models/catalog_query.dart';
 import '../models/page_result.dart';
 import '../models/supplier.dart';
 import '../models/supplier_license.dart';
+import '../models/drug.dart';
+import '../core/api_exceptions.dart';
+import '../repositories/catalog_api_controls.dart';
 import '../repositories/catalog_repository.dart';
 import 'load_status.dart';
 
@@ -81,6 +84,22 @@ class CatalogStore extends ChangeNotifier {
     await load(kind);
   }
 
+  Future<void> prepareForm(EntityKind kind, int? id) async {
+    await _repository.initialize();
+    if (id != null) await _repository.findById(kind, id);
+  }
+
+  void cancelList(EntityKind kind) {
+    if (_repository case final CancellableCatalogRepository remote) {
+      remote.cancelList(kind);
+      final state = list(kind);
+      if (state.status == LoadStatus.loading) {
+        state.request++;
+        state.status = LoadStatus.idle;
+      }
+    }
+  }
+
   Future<void> load(EntityKind kind) async {
     final state = list(kind);
     final request = ++state.request;
@@ -92,6 +111,8 @@ class CatalogStore extends ChangeNotifier {
       if (request != state.request) return;
       state.result = result;
       state.status = LoadStatus.success;
+    } on RequestCancelledException {
+      return;
     } catch (error) {
       if (request != state.request) return;
       state.error = 'Не удалось загрузить список: $error';
@@ -159,5 +180,16 @@ class CatalogStore extends ChangeNotifier {
     state.selected.clear();
     await _refresh();
     return count;
+  }
+
+  Future<Drug> dispenseDrug(int id, int quantity) async {
+    if (_repository case final DispensingCatalogRepository remote) {
+      final drug = await remote.dispenseDrug(id, quantity);
+      await _refresh();
+      return drug;
+    }
+    throw const ConflictException(
+      'Отпуск доступен только при подключении к серверу.',
+    );
   }
 }

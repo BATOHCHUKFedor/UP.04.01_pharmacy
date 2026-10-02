@@ -1,25 +1,32 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_web_plugins/url_strategy.dart';
 import 'package:provider/provider.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import 'package:dio/dio.dart';
 
 import 'core/form_leave_guard.dart';
 import 'core/router.dart';
 import 'repositories/catalog_repository.dart';
-import 'repositories/local_catalog_repository.dart';
+import 'core/api_client.dart';
+import 'repositories/api_catalog_repository.dart';
 import 'state/catalog_store.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   usePathUrlStrategy();
-  final repository = LocalCatalogRepository(SharedPreferencesAsync());
-  await repository.initialize();
   runApp(
     MultiProvider(
       providers: [
-        Provider<CatalogRepository>.value(value: repository),
+        Provider<Dio>(
+          create: (_) => buildDio(),
+          dispose: (_, dio) => dio.close(force: true),
+        ),
+        ProxyProvider<Dio, CatalogRepository>(
+          update: (_, dio, previous) => previous ?? ApiCatalogRepository(dio),
+        ),
         Provider<FormLeaveGuard>(create: (_) => FormLeaveGuard()),
-        ChangeNotifierProvider(create: (_) => CatalogStore(repository)),
+        ChangeNotifierProvider(
+          create: (context) => CatalogStore(context.read<CatalogRepository>()),
+        ),
       ],
       child: const PharmacyApp(),
     ),
