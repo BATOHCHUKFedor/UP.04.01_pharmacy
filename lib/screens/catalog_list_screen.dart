@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
@@ -115,6 +116,11 @@ class _CatalogListScreenState extends State<CatalogListScreen> {
     return AppScaffold(
       title: widget.kind.title,
       actions: [
+        IconButton(
+          tooltip: 'Обновить список',
+          icon: const Icon(Icons.refresh),
+          onPressed: () => store.load(widget.kind),
+        ),
         if (canAct(context, Permission.write))
           IconButton(
             tooltip: 'Создать',
@@ -124,60 +130,70 @@ class _CatalogListScreenState extends State<CatalogListScreen> {
       ],
       body: Padding(
         padding: const EdgeInsets.all(12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            if (store.showStorageNotice)
-              MaterialBanner(
-                content: Text(store.storageNotice!),
-                actions: [
-                  TextButton(
-                    onPressed: store.dismissStorageNotice,
-                    child: const Text('Понятно'),
+        child: LayoutBuilder(
+          builder: (context, constraints) => Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              if (store.showStorageNotice)
+                MaterialBanner(
+                  content: Text(store.storageNotice!),
+                  actions: [
+                    TextButton(
+                      onPressed: store.dismissStorageNotice,
+                      child: const Text('Понятно'),
+                    ),
+                  ],
+                ),
+              ConstrainedBox(
+                constraints: BoxConstraints(
+                  maxHeight: math.max(100, constraints.maxHeight * 0.45),
+                ),
+                child: SingleChildScrollView(child: _filters(store)),
+              ),
+              if (canAct(context, Permission.delete) &&
+                  state.selected.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 8),
+                  child: Wrap(
+                    spacing: 12,
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    children: [
+                      Text('Выбрано: ${state.selected.length}'),
+                      FilledButton.tonalIcon(
+                        onPressed: () => _deleteSelected(store),
+                        icon: const Icon(Icons.delete_sweep_outlined),
+                        label: const Text('Удалить выбранные'),
+                      ),
+                    ],
                   ),
-                ],
-              ),
-            _filters(store),
-            if (canAct(context, Permission.delete) && state.selected.isNotEmpty)
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: 8),
-                child: Row(
-                  children: [
-                    Expanded(child: Text('Выбрано: ${state.selected.length}')),
-                    FilledButton.tonalIcon(
-                      onPressed: () => _deleteSelected(store),
-                      icon: const Icon(Icons.delete_sweep_outlined),
-                      label: const Text('Удалить выбранные'),
-                    ),
-                  ],
+                ),
+              const SizedBox(height: 8),
+              Expanded(
+                child: ScreenStateView(
+                  status: state.status,
+                  error: state.error,
+                  isEmpty: state.result.items.isEmpty,
+                  emptyMessage: 'По заданным условиям записей нет',
+                  onRetry: () => store.load(widget.kind),
+                  child: Column(
+                    children: [
+                      Expanded(child: _results(store)),
+                      PaginationBar(
+                        page: state.result.page,
+                        totalPages: state.result.totalPages,
+                        totalItems: state.result.total,
+                        pageSize: state.result.size,
+                        onPageChanged: (page) =>
+                            _navigate(widget.query.copyWith(page: page)),
+                        onPageSizeChanged: (size) =>
+                            _navigate(widget.query.copyWith(size: size)),
+                      ),
+                    ],
+                  ),
                 ),
               ),
-            const SizedBox(height: 8),
-            Expanded(
-              child: ScreenStateView(
-                status: state.status,
-                error: state.error,
-                isEmpty: state.result.items.isEmpty,
-                emptyMessage: 'По заданным условиям записей нет',
-                onRetry: () => store.load(widget.kind),
-                child: Column(
-                  children: [
-                    Expanded(child: _results(store)),
-                    PaginationBar(
-                      page: state.result.page,
-                      totalPages: state.result.totalPages,
-                      totalItems: state.result.total,
-                      pageSize: state.result.size,
-                      onPageChanged: (page) =>
-                          _navigate(widget.query.copyWith(page: page)),
-                      onPageSizeChanged: (size) =>
-                          _navigate(widget.query.copyWith(size: size)),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -204,164 +220,176 @@ class _CatalogListScreenState extends State<CatalogListScreen> {
           ..sort();
     return Card(
       child: ExpansionTile(
+        key: ValueKey(
+          'filters-${widget.kind.name}-${MediaQuery.sizeOf(context).width >= 1280}',
+        ),
         title: const Text('Поиск и фильтры'),
-        initiallyExpanded: true,
+        initiallyExpanded: MediaQuery.sizeOf(context).width >= 1280,
         tilePadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
         childrenPadding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
         children: [
-          Wrap(
-            spacing: 12,
-            runSpacing: 12,
-            crossAxisAlignment: WrapCrossAlignment.center,
-            children: [
-              SizedBox(
-                width: 300,
-                child: TextField(
-                  controller: _search,
-                  onChanged: (value) =>
-                      _debounced(() => query.copyWith(search: value)),
-                  decoration: const InputDecoration(
-                    labelText: 'Поиск',
-                    prefixIcon: Icon(Icons.search),
-                    border: OutlineInputBorder(),
-                  ),
-                ),
-              ),
-              if (widget.kind == EntityKind.drugs) ...[
-                _idFilter(
-                  'Категория',
-                  query.categoryId,
-                  categories,
-                  (id) => _navigate(query.copyWith(categoryId: id)),
-                ),
-                _idFilter(
-                  'Производитель',
-                  query.manufacturerId,
-                  manufacturers,
-                  (id) => _navigate(query.copyWith(manufacturerId: id)),
-                ),
-                _idFilter(
-                  'Поставщик',
-                  query.supplierId,
-                  suppliers,
-                  (id) => _navigate(query.copyWith(supplierId: id)),
-                ),
-              ],
-              if (widget.kind == EntityKind.suppliers)
-                _idFilter(
-                  'Производитель',
-                  query.manufacturerId,
-                  manufacturers,
-                  (id) => _navigate(query.copyWith(manufacturerId: id)),
-                ),
-              if (widget.kind == EntityKind.licenses)
-                _idFilter(
-                  'Поставщик',
-                  query.supplierId,
-                  suppliers,
-                  (id) => _navigate(query.copyWith(supplierId: id)),
-                ),
-              if (widget.kind == EntityKind.suppliers ||
-                  widget.kind == EntityKind.manufacturers)
+          LayoutBuilder(
+            builder: (context, constraints) => Wrap(
+              spacing: 12,
+              runSpacing: 12,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
                 SizedBox(
-                  width: 200,
-                  child: DropdownButtonFormField<String?>(
-                    key: ValueKey(
-                      'country-${query.country}-${countries.join(',')}',
-                    ),
-                    initialValue: countries.contains(query.country)
-                        ? query.country
-                        : null,
-                    isExpanded: true,
+                  width: math.min(300, constraints.maxWidth),
+                  child: TextField(
+                    controller: _search,
+                    onChanged: (value) =>
+                        _debounced(() => query.copyWith(search: value)),
                     decoration: const InputDecoration(
-                      labelText: 'Страна',
+                      labelText: 'Поиск',
+                      prefixIcon: Icon(Icons.search),
                       border: OutlineInputBorder(),
                     ),
-                    items: [
-                      const DropdownMenuItem(
-                        value: null,
-                        child: Text('Все страны'),
+                  ),
+                ),
+                if (widget.kind == EntityKind.drugs) ...[
+                  _idFilter(
+                    'Категория',
+                    query.categoryId,
+                    categories,
+                    (id) => _navigate(query.copyWith(categoryId: id)),
+                  ),
+                  _idFilter(
+                    'Производитель',
+                    query.manufacturerId,
+                    manufacturers,
+                    (id) => _navigate(query.copyWith(manufacturerId: id)),
+                  ),
+                  _idFilter(
+                    'Поставщик',
+                    query.supplierId,
+                    suppliers,
+                    (id) => _navigate(query.copyWith(supplierId: id)),
+                  ),
+                ],
+                if (widget.kind == EntityKind.suppliers)
+                  _idFilter(
+                    'Производитель',
+                    query.manufacturerId,
+                    manufacturers,
+                    (id) => _navigate(query.copyWith(manufacturerId: id)),
+                  ),
+                if (widget.kind == EntityKind.licenses)
+                  _idFilter(
+                    'Поставщик',
+                    query.supplierId,
+                    suppliers,
+                    (id) => _navigate(query.copyWith(supplierId: id)),
+                  ),
+                if (widget.kind == EntityKind.suppliers ||
+                    widget.kind == EntityKind.manufacturers)
+                  SizedBox(
+                    width: 200,
+                    child: DropdownButtonFormField<String?>(
+                      key: ValueKey(
+                        'country-${query.country}-${countries.join(',')}',
                       ),
-                      ...countries.map(
-                        (country) => DropdownMenuItem(
-                          value: country,
-                          child: Text(country),
+                      initialValue: countries.contains(query.country)
+                          ? query.country
+                          : null,
+                      isExpanded: true,
+                      decoration: const InputDecoration(
+                        labelText: 'Страна',
+                        border: OutlineInputBorder(),
+                      ),
+                      items: [
+                        const DropdownMenuItem(
+                          value: null,
+                          child: Text('Все страны'),
+                        ),
+                        ...countries.map(
+                          (country) => DropdownMenuItem(
+                            value: country,
+                            child: Text(country),
+                          ),
+                        ),
+                      ],
+                      onChanged: (value) =>
+                          _navigate(query.copyWith(country: value)),
+                    ),
+                  ),
+                if (widget.kind == EntityKind.categories)
+                  FilterChip(
+                    label: const Text('Используемые'),
+                    selected: query.usedOnly == true,
+                    onSelected: (value) => _navigate(
+                      query.copyWith(usedOnly: value ? true : null),
+                    ),
+                  ),
+                if (widget.kind == EntityKind.drugs ||
+                    widget.kind == EntityKind.licenses) ...[
+                  SizedBox(
+                    width: 115,
+                    child: TextField(
+                      controller: _yearFrom,
+                      keyboardType: TextInputType.number,
+                      onChanged: (_) => _debounced(
+                        () => query.copyWith(
+                          yearFrom: int.tryParse(_yearFrom.text),
+                          yearTo: int.tryParse(_yearTo.text),
                         ),
                       ),
-                    ],
-                    onChanged: (value) =>
-                        _navigate(query.copyWith(country: value)),
-                  ),
-                ),
-              if (widget.kind == EntityKind.categories)
-                FilterChip(
-                  label: const Text('Используемые'),
-                  selected: query.usedOnly == true,
-                  onSelected: (value) =>
-                      _navigate(query.copyWith(usedOnly: value ? true : null)),
-                ),
-              if (widget.kind == EntityKind.drugs ||
-                  widget.kind == EntityKind.licenses) ...[
-                SizedBox(
-                  width: 115,
-                  child: TextField(
-                    controller: _yearFrom,
-                    keyboardType: TextInputType.number,
-                    onChanged: (_) => _debounced(
-                      () => query.copyWith(
-                        yearFrom: int.tryParse(_yearFrom.text),
-                        yearTo: int.tryParse(_yearTo.text),
+                      decoration: InputDecoration(
+                        labelText: widget.kind == EntityKind.drugs
+                            ? 'Год от'
+                            : 'Истекает от',
+                        border: const OutlineInputBorder(),
                       ),
                     ),
-                    decoration: InputDecoration(
-                      labelText: widget.kind == EntityKind.drugs
-                          ? 'Год от'
-                          : 'Истекает от',
-                      border: const OutlineInputBorder(),
-                    ),
                   ),
-                ),
-                SizedBox(
-                  width: 115,
-                  child: TextField(
-                    controller: _yearTo,
-                    keyboardType: TextInputType.number,
-                    onChanged: (_) => _debounced(
-                      () => query.copyWith(
-                        yearFrom: int.tryParse(_yearFrom.text),
-                        yearTo: int.tryParse(_yearTo.text),
+                  SizedBox(
+                    width: 115,
+                    child: TextField(
+                      controller: _yearTo,
+                      keyboardType: TextInputType.number,
+                      onChanged: (_) => _debounced(
+                        () => query.copyWith(
+                          yearFrom: int.tryParse(_yearFrom.text),
+                          yearTo: int.tryParse(_yearTo.text),
+                        ),
+                      ),
+                      decoration: InputDecoration(
+                        labelText: widget.kind == EntityKind.drugs
+                            ? 'Год до'
+                            : 'Истекает до',
+                        border: const OutlineInputBorder(),
                       ),
                     ),
-                    decoration: InputDecoration(
-                      labelText: widget.kind == EntityKind.drugs
-                          ? 'Год до'
-                          : 'Истекает до',
-                      border: const OutlineInputBorder(),
+                  ),
+                ],
+                if (canAct(context, Permission.write))
+                  SizedBox(
+                    width: math.min(300, constraints.maxWidth),
+                    child: Row(
+                      children: [
+                        Semantics(
+                          label: 'Показывать удалённые',
+                          child: Switch(
+                            value: query.includeDeleted,
+                            onChanged: (value) => _navigate(
+                              query.copyWith(includeDeleted: value),
+                            ),
+                          ),
+                        ),
+                        const Flexible(child: Text('Показывать удалённые')),
+                      ],
                     ),
                   ),
+                OutlinedButton.icon(
+                  onPressed: () {
+                    _debounce?.cancel();
+                    _navigate(const CatalogQuery());
+                  },
+                  icon: const Icon(Icons.filter_alt_off),
+                  label: const Text('Сбросить'),
                 ),
               ],
-              if (canAct(context, Permission.write))
-                Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Switch(
-                      value: query.includeDeleted,
-                      onChanged: (value) =>
-                          _navigate(query.copyWith(includeDeleted: value)),
-                    ),
-                    const Text('Показывать удалённые'),
-                  ],
-                ),
-              OutlinedButton.icon(
-                onPressed: () {
-                  _debounce?.cancel();
-                  _navigate(const CatalogQuery());
-                },
-                icon: const Icon(Icons.filter_alt_off),
-                label: const Text('Сбросить'),
-              ),
-            ],
+            ),
           ),
         ],
       ),
@@ -407,7 +435,7 @@ class _CatalogListScreenState extends State<CatalogListScreen> {
     final fields = _columns(store);
     return LayoutBuilder(
       builder: (context, constraints) {
-        if (MediaQuery.sizeOf(context).width < 600) {
+        if (MediaQuery.sizeOf(context).width < 1280) {
           return EntityCardList<CatalogItem>(
             items: items,
             idOf: (item) => item.id,
@@ -524,7 +552,17 @@ class _CatalogListScreenState extends State<CatalogListScreen> {
         ? key
         : null,
     numeric: numeric,
-    build: (item) => Text(_fieldValue(store, item, key)),
+    build: (item) => Tooltip(
+      message: _fieldValue(store, item, key),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 220),
+        child: Text(
+          _fieldValue(store, item, key),
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+        ),
+      ),
+    ),
   );
 
   String _fieldValue(CatalogStore store, CatalogItem item, String key) =>

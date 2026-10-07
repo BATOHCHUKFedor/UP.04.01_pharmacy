@@ -12,6 +12,7 @@ import '../screens/auth_screen.dart';
 import '../screens/workspace_screen.dart';
 import '../state/auth_notifier.dart';
 import '../widgets/app_scaffold.dart';
+import '../widgets/screen_state_view.dart';
 import 'access_policy.dart';
 
 EntityKind? kindFromPath(String? path) {
@@ -159,12 +160,13 @@ class _HomePage extends StatelessWidget {
     final user = context.watch<AuthNotifier>().user;
     return AppScaffold(
       title: 'Аптечный каталог',
-      body: Center(
+      body: CenteredMessage(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             Text(
               'Здравствуйте, ${user?.name ?? ''}!',
+              textAlign: TextAlign.center,
               style: Theme.of(context).textTheme.headlineSmall,
             ),
             Text(user?.role.label ?? ''),
@@ -190,11 +192,14 @@ class _ForbiddenPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) => AppScaffold(
     title: 'Доступ запрещён',
-    body: Center(
+    body: CenteredMessage(
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Text('Ваша роль не позволяет открыть этот раздел.'),
+          const Text(
+            'Ваша роль не позволяет открыть этот раздел.',
+            textAlign: TextAlign.center,
+          ),
           FilledButton(
             onPressed: () => context.go('/'),
             child: const Text('На главный экран'),
@@ -210,7 +215,7 @@ class _UnknownPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) => AppScaffold(
     title: 'Страница не найдена',
-    body: Center(
+    body: CenteredMessage(
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [

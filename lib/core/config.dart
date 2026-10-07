@@ -1,4 +1,2 @@
-const apiBaseUrl = String.fromEnvironment(
-  'API_BASE_URL',
-  defaultValue: 'http://localhost:8080/api',
-);
+// Адрес задаётся при запуске или сборке через --dart-define=API_BASE_URL=...
+const apiBaseUrl = String.fromEnvironment('API_BASE_URL');

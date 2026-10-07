@@ -142,7 +142,17 @@ class CatalogForm extends StatelessWidget {
             children: options.map((item) {
               final selected = (state.value ?? []).contains(item.id);
               return FilterChip(
-                label: Text(item.title),
+                label: Tooltip(
+                  message: item.title,
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 180),
+                    child: Text(
+                      item.title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ),
                 selected: selected,
                 onSelected: saving
                     ? null

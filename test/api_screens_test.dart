@@ -22,6 +22,10 @@ void main() {
     GoRouter router,
     ApiHandler handler,
   ) async {
+    tester.view.physicalSize = const Size(1280, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
     final dio = buildDio(baseUrl: 'http://test/api');
     dio.httpClientAdapter = FakeApiAdapter(
       (options, cancel) => options.path == '/references'

@@ -23,9 +23,14 @@ class ScreenStateView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return switch (status) {
-      LoadStatus.idle ||
-      LoadStatus.loading => const Center(child: CircularProgressIndicator()),
-      LoadStatus.error => Center(
+      LoadStatus.idle || LoadStatus.loading => Center(
+        child: Semantics(
+          label: 'Загрузка данных',
+          liveRegion: true,
+          child: const CircularProgressIndicator(),
+        ),
+      ),
+      LoadStatus.error => CenteredMessage(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -45,17 +50,33 @@ class ScreenStateView extends StatelessWidget {
           ],
         ),
       ),
-      LoadStatus.success when isEmpty => Center(
+      LoadStatus.success when isEmpty => CenteredMessage(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             const Icon(Icons.search_off, size: 48),
             const SizedBox(height: 12),
-            Text(emptyMessage),
+            Text(emptyMessage, textAlign: TextAlign.center),
           ],
         ),
       ),
       LoadStatus.success => child,
     };
   }
+}
+
+/// Scrollable even on a short window or at a large text scale.
+class CenteredMessage extends StatelessWidget {
+  final Widget child;
+  const CenteredMessage({super.key, required this.child});
+  @override
+  Widget build(BuildContext context) => Center(
+    child: SingleChildScrollView(
+      padding: const EdgeInsets.all(24),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 560),
+        child: child,
+      ),
+    ),
+  );
 }

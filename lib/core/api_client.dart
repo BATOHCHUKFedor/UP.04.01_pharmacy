@@ -11,9 +11,16 @@ Dio buildDio({
   Future<void> Function()? onSessionExpired,
   String? Function()? sessionProvider,
 }) {
+  final resolvedBaseUrl = baseUrl ?? apiBaseUrl;
+  if (resolvedBaseUrl.isEmpty) {
+    throw ArgumentError(
+      'Укажите адрес API через --dart-define=API_BASE_URL=...'
+      ' при запуске или сборке приложения.',
+    );
+  }
   final dio = Dio(
     BaseOptions(
-      baseUrl: baseUrl ?? apiBaseUrl,
+      baseUrl: resolvedBaseUrl,
       connectTimeout: const Duration(seconds: 10),
       sendTimeout: const Duration(seconds: 10),
       receiveTimeout: const Duration(seconds: 15),

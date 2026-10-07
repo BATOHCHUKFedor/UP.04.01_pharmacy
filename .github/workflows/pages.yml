@@ -1,0 +1,96 @@
+name: Flutter Web — GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: github-pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    permissions:
+      contents: read
+      pages: read
+    env:
+      API_BASE_URL: ${{ vars.API_BASE_URL }}
+      BASE_HREF: /${{ github.event.repository.name }}/
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.44.0'
+          channel: stable
+          cache: true
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '22.15.0'
+
+      - name: Check build configuration
+        run: |
+          node -e 'const value = process.env.API_BASE_URL; if (!value) throw new Error("Set repository variable API_BASE_URL in Settings > Secrets and variables > Actions > Variables"); const url = new URL(value); if (url.protocol !== "https:" || url.username || url.password || url.search || url.hash) throw new Error("API_BASE_URL must be an HTTPS API URL without credentials, query or fragment");'
+          flutter --version
+          node --version
+
+      - name: Install Flutter dependencies
+        run: flutter pub get
+
+      - name: Check Dart formatting
+        run: dart format --output=none --set-exit-if-changed lib test
+
+      - name: Analyze Flutter code
+        run: flutter analyze
+
+      - name: Run Flutter tests
+        run: flutter test --reporter expanded
+
+      - name: Run API and packaging tests
+        run: node --test server/mock-server.test.js server/auth.test.js tool/optimize_release.test.js
+
+      - name: Configure GitHub Pages
+        uses: actions/configure-pages@v5
+
+      - name: Build release client
+        run: >-
+          flutter build web --release
+          --base-href "$BASE_HREF"
+          --dart-define="API_BASE_URL=$API_BASE_URL"
+
+      - name: Optimize publication package
+        run: node tool/optimize_release.js --input build/web --output build/pr6-builds/optimized
+
+      - name: Add fallback for internal routes
+        run: cp build/pr6-builds/optimized/index.html build/pr6-builds/optimized/404.html
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v4
+        with:
+          path: build/pr6-builds/optimized
+
+  deploy:
+    if: github.ref == 'refs/heads/main'
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

@@ -20,6 +20,35 @@ class PaginationBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    Widget pageButton(
+      String tooltip,
+      IconData icon,
+      int target,
+      bool enabled,
+    ) => IconButton(
+      tooltip: tooltip,
+      onPressed: enabled ? () => onPageChanged(target) : null,
+      icon: Icon(icon),
+      padding: const EdgeInsets.all(4),
+      constraints: const BoxConstraints(minWidth: 32, minHeight: 40),
+      visualDensity: VisualDensity.compact,
+    );
+    final pageButtons = [
+      pageButton('Первая страница', Icons.first_page, 1, page > 1),
+      pageButton('Предыдущая страница', Icons.chevron_left, page - 1, page > 1),
+      pageButton(
+        'Следующая страница',
+        Icons.chevron_right,
+        page + 1,
+        page < totalPages,
+      ),
+      pageButton(
+        'Последняя страница',
+        Icons.last_page,
+        totalPages,
+        page < totalPages,
+      ),
+    ];
     final navigation = Wrap(
       alignment: WrapAlignment.center,
       crossAxisAlignment: WrapCrossAlignment.center,
@@ -64,19 +93,22 @@ class PaginationBar extends StatelessWidget {
       children: [
         const Text('На странице:'),
         const SizedBox(width: 8),
-        DropdownButton<int>(
-          value: pageSize,
-          underline: const SizedBox.shrink(),
-          items: const [10, 25, 50]
-              .map(
-                (size) => DropdownMenuItem(value: size, child: Text('$size')),
-              )
-              .toList(),
-          onChanged: (value) {
-            if (value != null) {
-              onPageSizeChanged(value);
-            }
-          },
+        Semantics(
+          label: 'Количество записей на странице',
+          child: DropdownButton<int>(
+            value: pageSize,
+            underline: const SizedBox.shrink(),
+            items: const [10, 25, 50]
+                .map(
+                  (size) => DropdownMenuItem(value: size, child: Text('$size')),
+                )
+                .toList(),
+            onChanged: (value) {
+              if (value != null) {
+                onPageSizeChanged(value);
+              }
+            },
+          ),
         ),
       ],
     );
@@ -94,7 +126,21 @@ class PaginationBar extends StatelessWidget {
           if (constraints.maxWidth < 700) {
             return Column(
               mainAxisSize: MainAxisSize.min,
-              children: [navigation, pageSizeSelector],
+              children: [
+                Text(
+                  'Страница $page из $totalPages · Всего: $totalItems',
+                  textAlign: TextAlign.center,
+                ),
+                Wrap(
+                  alignment: WrapAlignment.center,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  spacing: 12,
+                  children: [
+                    Row(mainAxisSize: MainAxisSize.min, children: pageButtons),
+                    pageSizeSelector,
+                  ],
+                ),
+              ],
             );
           }
           return Row(

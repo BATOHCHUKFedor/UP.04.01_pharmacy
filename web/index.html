@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html>
+<html lang="ru">
 <head>
   <!--
     If you are serving your web app in a path other than the root, change the
@@ -17,8 +17,9 @@
   <base href="$FLUTTER_BASE_HREF">
 
   <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta content="IE=Edge" http-equiv="X-UA-Compatible">
-  <meta name="description" content="A new Flutter project.">
+  <meta name="description" content="Аптечный каталог: препараты, поставщики и бронирования.">
 
   <!-- iOS meta tags & icons -->
   <meta name="mobile-web-app-capable" content="yes">
@@ -29,10 +30,31 @@
   <!-- Favicon -->
   <link rel="icon" type="image/png" href="favicon.png"/>
 
-  <title>pharmacy_project</title>
+  <title>Аптечный каталог</title>
   <link rel="manifest" href="manifest.json">
+  <style>
+    #app-loading { position: fixed; inset: 0; display: grid; place-content: center;
+      gap: 24px; padding: 24px; background: #f4fbf9; color: #123a36;
+      font: 600 24px system-ui, sans-serif; text-align: center; }
+    #app-loading .spinner { width: 40px; height: 40px; margin: auto;
+      border: 4px solid #c8ded9; border-top-color: #00796b; border-radius: 50%;
+      animation: spin 1s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    @media (prefers-reduced-motion: reduce) { #app-loading .spinner { animation: none; } }
+  </style>
 </head>
 <body>
+  <div id="app-loading" role="status" aria-live="polite">
+    <span>Аптечный каталог</span>
+    <div class="spinner" aria-hidden="true"></div>
+    <span style="font-size:16px;font-weight:400">Загрузка приложения…</span>
+  </div>
+  <noscript>Для работы аптечного каталога включите JavaScript в браузере.</noscript>
+  <script>
+    window.addEventListener('flutter-first-frame', function () {
+      document.getElementById('app-loading')?.remove();
+    });
+  </script>
   <!--
     You can customize the "flutter_bootstrap.js" script.
     This is useful to provide a custom configuration to the Flutter loader

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../widgets/responsive_cards.dart';
 import 'package:provider/provider.dart';
 import '../core/api_exceptions.dart';
 import '../core/auth_validators.dart';
@@ -76,7 +77,7 @@ class _WorkspaceBody extends StatelessWidget {
             ? 'Бронирований пока нет'
             : 'Пользователей пока нет',
         onRetry: state.load,
-        child: ListView(
+        child: ResponsiveCards(
           padding: const EdgeInsets.all(16),
           children: [
             if (_stats)

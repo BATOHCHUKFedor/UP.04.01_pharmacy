@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'responsive_cards.dart';
 
 class CardFieldSpec<T> {
   final String label;
@@ -32,12 +33,9 @@ class EntityCardList<T> extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ListView.separated(
+    return ResponsiveCards(
       padding: const EdgeInsets.only(bottom: 12),
-      itemCount: items.length,
-      separatorBuilder: (_, _) => const SizedBox(height: 8),
-      itemBuilder: (context, index) {
-        final item = items[index];
+      children: items.map((item) {
         final id = idOf(item);
         final deleted = isDeleted?.call(item) ?? false;
         final selectable = isSelectable?.call(item) ?? true;
@@ -56,6 +54,7 @@ class EntityCardList<T> extends StatelessWidget {
                   children: [
                     if (onToggleSelect != null)
                       Checkbox(
+                        semanticLabel: 'Выбрать ${titleOf(item)}',
                         value: selected.contains(id),
                         onChanged: selectable
                             ? (_) => onToggleSelect!(id)
@@ -64,6 +63,8 @@ class EntityCardList<T> extends StatelessWidget {
                     Expanded(
                       child: Text(
                         titleOf(item),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
                         style: Theme.of(context).textTheme.titleMedium,
                       ),
                     ),
@@ -73,7 +74,14 @@ class EntityCardList<T> extends StatelessWidget {
                 for (final field in fields)
                   Padding(
                     padding: const EdgeInsets.only(top: 4),
-                    child: Text('${field.label}: ${field.value(item)}'),
+                    child: Tooltip(
+                      message: '${field.label}: ${field.value(item)}',
+                      child: Text(
+                        '${field.label}: ${field.value(item)}',
+                        maxLines: 3,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
                   ),
                 Align(
                   alignment: Alignment.centerRight,
@@ -83,7 +91,7 @@ class EntityCardList<T> extends StatelessWidget {
             ),
           ),
         );
-      },
+      }).toList(),
     );
   }
 }

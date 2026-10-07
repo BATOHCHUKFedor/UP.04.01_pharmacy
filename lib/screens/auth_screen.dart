@@ -5,6 +5,7 @@ import '../core/access_policy.dart';
 import '../core/api_exceptions.dart';
 import '../core/auth_validators.dart';
 import '../state/auth_notifier.dart';
+import '../widgets/screen_state_view.dart';
 
 class AuthScreen extends StatefulWidget {
   final bool register;
@@ -60,7 +61,9 @@ class _AuthScreenState extends State<AuthScreen> {
     final auth = context.watch<AuthNotifier>();
     final title = widget.register ? 'Регистрация' : 'Вход в аптечный каталог';
     return Scaffold(
-      appBar: AppBar(title: Text(title)),
+      appBar: AppBar(
+        title: Text(title, maxLines: 1, overflow: TextOverflow.ellipsis),
+      ),
       body: Center(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(24),
@@ -192,7 +195,21 @@ class _AuthScreenState extends State<AuthScreen> {
       onChanged: (_) {
         if (_errors.containsKey(key)) setState(() => _errors.remove(key));
       },
-      onFieldSubmitted: (_) => _submit(),
+      textInputAction:
+          (widget.register
+              ? controller == _confirmation
+              : controller == _password)
+          ? TextInputAction.done
+          : TextInputAction.next,
+      onFieldSubmitted: (_) {
+        if (widget.register
+            ? controller == _confirmation
+            : controller == _password) {
+          _submit();
+        } else {
+          FocusScope.of(context).nextFocus();
+        }
+      },
       decoration: InputDecoration(
         labelText: label,
         errorText: _errors[key],
@@ -219,9 +236,16 @@ class SessionScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final auth = context.watch<AuthNotifier>();
     return Scaffold(
-      body: Center(
+      body: CenteredMessage(
         child: auth.initializing
-            ? const CircularProgressIndicator()
+            ? const Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text('Аптечный каталог'),
+                  SizedBox(height: 16),
+                  CircularProgressIndicator(),
+                ],
+              )
             : Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [

@@ -38,7 +38,7 @@ class Validators {
       (value) {
         if ((value ?? '').trim().isEmpty) return 'Заполните поле';
         final parsed = double.tryParse(value!.trim().replaceAll(',', '.'));
-        if (parsed == null) return 'Введите число';
+        if (parsed == null || !parsed.isFinite) return 'Введите число';
         if (parsed < min || parsed > max) return 'Число от $min до $max';
         return null;
       };
