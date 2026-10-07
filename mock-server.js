@@ -4,19 +4,16 @@ const http = require('node:http');
 const fs = require('node:fs');
 const path = require('node:path');
 const seed = require('./server/seed-data.json');
+const { HttpError } = require('./server/http-error');
+const { createAuth } = require('./server/auth');
+const { createAccountRoutes } = require('./server/account-routes');
 const kinds = ['drugs', 'suppliers', 'manufacturers', 'categories', 'licenses'];
 
-class HttpError extends Error {
-  constructor(status, message, errors) {
-    super(message);
-    this.status = status;
-    this.errors = errors;
-  }
-}
 const invalid = errors => { throw new HttpError(422, 'Проверьте поля формы.', errors); };
 
 function createMockServer({ origin = 'http://localhost:5555', data = seed,
-  dataFile = null, logger = console.log } = {}) {
+  dataFile = null, logger = console.log, ttl = 900, sessionTtl = 3600,
+  idleTtl = 180, now = Date.now } = {}) {
   let db = structuredClone(data);
   if (dataFile && fs.existsSync(dataFile)) {
     db = JSON.parse(fs.readFileSync(dataFile, 'utf8'));
@@ -72,6 +69,8 @@ function createMockServer({ origin = 'http://localhost:5555', data = seed,
     commit(next);
     return result;
   }
+  const auth = createAuth({ getDb: () => db, transaction, ttl, sessionTtl, idleTtl, now });
+  const accounts = createAccountRoutes({ auth, getDb: () => db, transaction, readBody, now });
   function validate(rows, kind, body, id) {
     const errors = {};
     const value = { id, deletedAt: lookup(rows, kind, id)?.deletedAt ?? null };
@@ -182,6 +181,8 @@ function createMockServer({ origin = 'http://localhost:5555', data = seed,
   }
   function checkDeletion(rows, kind, id) {
     let count = 0;
+    if (kind === 'drugs') count = rows.reservations.filter(r => r.drugId === id && r.status === 'reserved').length;
+    if (count) throw new HttpError(409, `Удаление невозможно: действующих бронирований — ${count}`);
     if (kind === 'manufacturers') count = rows.drugs.filter(d => d.manufacturerId === id).length;
     if (kind === 'suppliers') count = rows.drugs.filter(d => d.supplierId === id).length;
     if (kind === 'categories') count = rows.drugs.filter(d => d.categoryIds.includes(id)).length;
@@ -271,6 +272,24 @@ function createMockServer({ origin = 'http://localhost:5555', data = seed,
       }
       if (req.method === 'OPTIONS') return send(204);
       const url = new URL(req.url, 'http://localhost');
+      const parts = url.pathname.split('/').filter(Boolean);
+      if (parts[0] !== 'api') throw new HttpError(404, 'Ожидается адрес /api.');
+      if (parts[1] === '__health' && req.method === 'GET') return send(200, { status: 'ok' });
+      if (await accounts.publicRoutes(req, parts, send)) return;
+      const actor = auth.authenticate(req);
+      if (await accounts.protectedRoutes(req, parts, actor, send)) return;
+      const kind = parts[1];
+      if (kind !== 'references' && !kinds.includes(kind)) throw new HttpError(404, 'Ресурс не найден.');
+      const operation = req.method === 'GET' ? 'catalog.read' :
+        parts[3] === 'dispense' ? 'dispense' :
+        parts[3] === 'restore' ? 'catalog.restore' :
+        req.method === 'DELETE' && url.searchParams.get('hard') === 'true' ? 'catalog.hardDelete' :
+        req.method === 'DELETE' || parts[2] === 'bulk-delete' ? 'catalog.delete' : 'catalog.write';
+      auth.requirePermission(actor.user, operation);
+      if (actor.user.role === 'customer' && (kind !== 'drugs' && kind !== 'references' ||
+          url.searchParams.get('includeDeleted') === 'true')) {
+        throw new HttpError(403, 'Этот раздел доступен только сотрудникам аптеки.');
+      }
       const delay = Math.min(30000, Math.max(0, Number(url.searchParams.get('__delay')) || 0));
       if (delay) await new Promise(resolve => setTimeout(resolve, delay));
       if (res.destroyed) return;
@@ -278,15 +297,10 @@ function createMockServer({ origin = 'http://localhost:5555', data = seed,
         const status = Number(url.searchParams.get('__fail'));
         throw new HttpError(status >= 400 && status <= 599 ? status : 500, 'Принудительная ошибка учебного сервера.');
       }
-      const parts = url.pathname.split('/').filter(Boolean);
-      if (parts[0] !== 'api') throw new HttpError(404, 'Ожидается адрес /api.');
-      if (parts[1] === '__health' && req.method === 'GET') return send(200, { status: 'ok' });
       if (parts[1] === 'references' && req.method === 'GET') {
         return send(200, Object.fromEntries(kinds.filter(k => k !== 'drugs')
           .map(k => [k, db[k].map(item => expand(k, item))])));
       }
-      const kind = parts[1];
-      if (!kinds.includes(kind)) throw new HttpError(404, 'Ресурс не найден.');
       if (parts.length === 2 && req.method === 'GET') return send(200, list(kind, url.searchParams));
       if (parts.length === 2 && req.method === 'POST') {
         const body = await readBody(req);
@@ -306,6 +320,7 @@ function createMockServer({ origin = 'http://localhost:5555', data = seed,
       const id = Number(parts[2]);
       if (!Number.isSafeInteger(id) || id <= 0) throw new HttpError(404, 'Запись не найдена.');
       const item = existing(kind, id);
+      if (actor.user.role === 'customer' && item.deletedAt) throw new HttpError(404, 'Запись не найдена.');
       if (parts.length === 3 && req.method === 'GET') return send(200, expand(kind, item));
       if (parts.length === 3 && req.method === 'PUT') {
         if (item.deletedAt) throw new HttpError(409, 'Сначала восстановите удалённую запись.');
@@ -370,7 +385,8 @@ if (require.main === module) {
   if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error('Неверный --port');
   const dataFile = args.includes('--no-persist') ? null :
     path.resolve(option('--data-file', path.join(__dirname, '.mock-data', 'catalog.v1.json')));
-  const server = createMockServer({ origin, dataFile });
+  const server = createMockServer({ origin, dataFile, ttl: Number(option('--ttl', '900')),
+    sessionTtl: Number(option('--session-ttl', '3600')), idleTtl: Number(option('--idle-ttl', '180')) });
   server.on('error', error => { console.error(`Не удалось запустить сервер: ${error.message}`); process.exitCode = 1; });
   server.listen(port, option('--host', '127.0.0.1'), () => {
     console.log(`API: http://localhost:${port}/api; разрешённый Origin: ${origin}`);

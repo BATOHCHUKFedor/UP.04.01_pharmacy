@@ -17,6 +17,8 @@ import '../state/load_status.dart';
 import '../widgets/screen_state_view.dart';
 import '../widgets/catalog_form.dart';
 import '../widgets/confirm_dialog.dart';
+import '../widgets/app_scaffold.dart';
+import '../state/auth_notifier.dart';
 
 class CatalogFormScreen extends StatefulWidget {
   final EntityKind kind;
@@ -501,23 +503,22 @@ class _CatalogFormScreenState extends State<CatalogFormScreen> {
   @override
   Widget build(BuildContext context) {
     return PopScope(
-      canPop: _allowPop || !_dirty,
+      canPop:
+          _allowPop ||
+          !_dirty ||
+          context.watch<AuthNotifier?>()?.authenticated == false,
       onPopInvokedWithResult: (didPop, _) {
         if (!didPop && !_allowPop) _leave();
       },
-      child: Scaffold(
-        appBar: AppBar(
-          leading: IconButton(
-            tooltip: 'Назад',
-            onPressed: _leave,
-            icon: const Icon(Icons.arrow_back),
-          ),
-          title: Text(
-            widget.id == null
-                ? 'Новая запись: ${widget.kind.singular}'
-                : 'Изменить: ${widget.kind.singular}',
-          ),
+      child: AppScaffold(
+        leading: IconButton(
+          tooltip: 'Назад',
+          onPressed: _leave,
+          icon: const Icon(Icons.arrow_back),
         ),
+        title: widget.id == null
+            ? 'Новая запись: ${widget.kind.singular}'
+            : 'Изменить: ${widget.kind.singular}',
         body: ScreenStateView(
           status: _loadStatus,
           error: _loadError,

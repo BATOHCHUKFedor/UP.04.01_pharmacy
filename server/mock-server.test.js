@@ -12,8 +12,16 @@ async function start(t, options = {}) {
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
   t.after(() => new Promise(resolve => { server.close(resolve); server.closeAllConnections(); }));
   const base = `http://127.0.0.1:${server.address().port}/api`;
+  const tokens = {};
+  for (const [username, password] of [['admin', 'Admin123!'], ['pharmacist', 'Pharmacist123!']]) {
+    const response = await fetch(base + '/auth/login', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, password }) });
+    assert.equal(response.status, 200);
+    tokens[username] = (await response.json()).accessToken;
+  }
   return async (route, method = 'GET', body, headers = {}) => {
-    const response = await fetch(base + route, { method, headers: { 'Content-Type': 'application/json', ...headers },
+    const token = tokens[route.includes('/dispense') ? 'pharmacist' : 'admin'];
+    const response = await fetch(base + route, { method, headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}`, ...headers },
       ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
     return { status: response.status, headers: response.headers,
       body: response.status === 204 ? null : await response.json() };

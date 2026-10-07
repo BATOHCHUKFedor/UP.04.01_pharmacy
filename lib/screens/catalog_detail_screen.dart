@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import '../models/catalog_item.dart';
 import '../models/category.dart';
 import '../models/drug.dart';
+import '../models/auth_user.dart';
 import '../models/manufacturer.dart';
 import '../models/supplier.dart';
 import '../models/supplier_license.dart';
@@ -101,7 +102,9 @@ class _CatalogDetailScreenState extends State<CatalogDetailScreen> {
                               spacing: 8,
                               runSpacing: 8,
                               children: [
-                                if (item is Drug && !item.isDeleted)
+                                if (item is Drug &&
+                                    !item.isDeleted &&
+                                    canAct(context, Permission.dispense))
                                   FilledButton.tonalIcon(
                                     onPressed: _dispensing
                                         ? null
@@ -111,14 +114,28 @@ class _CatalogDetailScreenState extends State<CatalogDetailScreen> {
                                       _dispensing ? 'Отпускаем…' : 'Отпустить',
                                     ),
                                   ),
-                                if (!item.isDeleted)
+                                if (item is Drug &&
+                                    !item.isDeleted &&
+                                    canAct(context, Permission.reservations))
+                                  OutlinedButton.icon(
+                                    onPressed: () => context.go(
+                                      '/work/reservations?drugId=$id',
+                                    ),
+                                    icon: const Icon(
+                                      Icons.bookmark_add_outlined,
+                                    ),
+                                    label: const Text('Бронирования'),
+                                  ),
+                                if (!item.isDeleted &&
+                                    canAct(context, Permission.write))
                                   OutlinedButton.icon(
                                     onPressed: () =>
                                         context.push('/${kind.path}/$id/edit'),
                                     icon: const Icon(Icons.edit_outlined),
                                     label: const Text('Изменить'),
                                   ),
-                                if (item.isDeleted)
+                                if (item.isDeleted &&
+                                    canAct(context, Permission.restore))
                                   FilledButton.tonalIcon(
                                     onPressed: () => _run(
                                       context,
@@ -126,22 +143,24 @@ class _CatalogDetailScreenState extends State<CatalogDetailScreen> {
                                     ),
                                     icon: const Icon(Icons.restore),
                                     label: const Text('Восстановить'),
-                                  )
-                                else
+                                  ),
+                                if (!item.isDeleted &&
+                                    canAct(context, Permission.delete))
                                   FilledButton.tonalIcon(
                                     onPressed: () =>
                                         _remove(context, store, hard: false),
                                     icon: const Icon(Icons.delete_outline),
                                     label: const Text('Удалить'),
                                   ),
-                                FilledButton.icon(
-                                  onPressed: () =>
-                                      _remove(context, store, hard: true),
-                                  icon: const Icon(
-                                    Icons.delete_forever_outlined,
+                                if (canAct(context, Permission.hardDelete))
+                                  FilledButton.icon(
+                                    onPressed: () =>
+                                        _remove(context, store, hard: true),
+                                    icon: const Icon(
+                                      Icons.delete_forever_outlined,
+                                    ),
+                                    label: const Text('Удалить навсегда'),
                                   ),
-                                  label: const Text('Удалить навсегда'),
-                                ),
                               ],
                             ),
                           ],
@@ -157,6 +176,7 @@ class _CatalogDetailScreenState extends State<CatalogDetailScreen> {
 
   List<Widget> _fields(CatalogStore store, CatalogItem item) => switch (item) {
     Drug d => [
+      DetailField(label: 'Код препарата', value: '${d.id}'),
       DetailField(label: 'Регистрационный номер', value: d.registrationNumber),
       DetailField(
         label: 'Категории',

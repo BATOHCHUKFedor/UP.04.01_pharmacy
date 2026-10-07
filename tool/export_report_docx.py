@@ -4,6 +4,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 import re
 import sys
+import struct
+from xml.sax.saxutils import escape
 import xml.etree.ElementTree as ET
 from zipfile import ZIP_DEFLATED, ZipFile
 
@@ -13,6 +15,46 @@ R = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships'
 XML = 'http://www.w3.org/XML/1998/namespace'
 ET.register_namespace('w', W)
 ET.register_namespace('r', R)
+WP = 'http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing'
+A = 'http://schemas.openxmlformats.org/drawingml/2006/main'
+PIC = 'http://schemas.openxmlformats.org/drawingml/2006/picture'
+for prefix, namespace in [('wp', WP), ('a', A), ('pic', PIC)]:
+    ET.register_namespace(prefix, namespace)
+
+
+def image_paragraph(parent, caption, image_path, images):
+    payload = image_path.read_bytes()
+    if not payload.startswith(b'\x89PNG\r\n\x1a\n'):
+        raise ValueError(f'Only PNG images are supported: {image_path}')
+    width, height = struct.unpack('>II', payload[16:24])
+    index = len(images) + 1
+    images.append(payload)
+    cx = 6120000
+    cy = round(cx * height / width)
+    element = node(parent, 'p')
+    drawing = node(node(element, 'r'), 'drawing')
+    def draw(parent, namespace, tag, **attributes):
+        return ET.SubElement(parent, f'{{{namespace}}}{tag}', {key: str(value) for key, value in attributes.items()})
+    inline = draw(drawing, WP, 'inline', distT=0, distB=0, distL=0, distR=0)
+    draw(inline, WP, 'extent', cx=cx, cy=cy)
+    draw(inline, WP, 'docPr', id=index, name=caption, descr=caption)
+    draw(draw(inline, WP, 'cNvGraphicFramePr'), A, 'graphicFrameLocks', noChangeAspect=1)
+    graphic = draw(inline, A, 'graphic')
+    data = draw(graphic, A, 'graphicData', uri=PIC)
+    picture = draw(data, PIC, 'pic')
+    nonvisual = draw(picture, PIC, 'nvPicPr')
+    draw(nonvisual, PIC, 'cNvPr', id=index, name=caption)
+    draw(nonvisual, PIC, 'cNvPicPr')
+    fill = draw(picture, PIC, 'blipFill')
+    blip = draw(fill, A, 'blip')
+    blip.set(f'{{{R}}}embed', f'rIdImage{index}')
+    draw(draw(fill, A, 'stretch'), A, 'fillRect')
+    shape = draw(picture, PIC, 'spPr')
+    transform = draw(shape, A, 'xfrm')
+    draw(transform, A, 'off', x=0, y=0)
+    draw(transform, A, 'ext', cx=cx, cy=cy)
+    draw(draw(shape, A, 'prstGeom', prst='rect'), A, 'avLst')
+    paragraph(parent, caption, size=20)
 
 
 def node(parent, name, **attributes):
@@ -139,7 +181,7 @@ def styles():
     return root
 
 
-def document(markdown):
+def document(markdown, source, images):
     root = ET.Element(f'{{{W}}}document')
     body = node(root, 'body')
     lines = markdown.splitlines()
@@ -163,6 +205,11 @@ def document(markdown):
             if index == len(lines):
                 raise ValueError('Unclosed Markdown code fence')
             paragraph(body)
+        elif line.startswith('!['):
+            match = re.fullmatch(r'!\[(.+)\]\((.+)\)', line)
+            if not match:
+                raise ValueError(f'Invalid image: {line}')
+            image_paragraph(body, match[1], (source.parent / match[2]).resolve(), images)
         elif line.startswith('|'):
             rows = []
             while index < len(lines) and lines[index].strip().startswith('|'):
@@ -181,7 +228,7 @@ def document(markdown):
         else:
             parts = [line]
             index += 1
-            while index < len(lines) and lines[index].strip() and not lines[index].strip().startswith(('#', '|', '```')):
+            while index < len(lines) and lines[index].strip() and not lines[index].strip().startswith(('#', '|', '```', '![')):
                 parts.append(lines[index].strip())
                 index += 1
             paragraph(body, ' '.join(parts))
@@ -206,7 +253,9 @@ def main():
     if target.exists():
         raise FileExistsError(f'Refusing to overwrite existing document: {target}')
     markdown = source.read_text(encoding='utf-8-sig')
-    doc = document(markdown)
+    images = []
+    doc = document(markdown, source, images)
+    title = next((line.lstrip('#').strip() for line in markdown.splitlines() if line.startswith('# ')), source.stem)
     footer = ET.Element(f'{{{W}}}ftr')
     page = paragraph(footer)
     node(page.find(f'{{{W}}}pPr'), 'jc', val='center')
@@ -240,8 +289,8 @@ def main():
         'word/footer1.xml': serialize(footer),
         'docProps/core.xml': f'''<?xml version="1.0" encoding="UTF-8"?>
 <cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:dcterms="http://purl.org/dc/terms/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
-<dc:title>ПР4. Работа с API и обработка сетевых ошибок</dc:title>
-<dc:subject>Аптечный каталог: эндпоинты, исключения и CORS</dc:subject>
+<dc:title>{escape(title)}</dc:title>
+<dc:subject>Аптечный каталог. Учебный отчёт.</dc:subject>
 <dc:language>ru-RU</dc:language>
 <dcterms:created xsi:type="dcterms:W3CDTF">{now}</dcterms:created>
 <dcterms:modified xsi:type="dcterms:W3CDTF">{now}</dcterms:modified>
@@ -251,6 +300,13 @@ def main():
     }
     for value in entries.values():
         ET.fromstring(value)
+    if images:
+        entries['[Content_Types].xml'] = entries['[Content_Types].xml'].replace('</Types>',
+            '<Default Extension="png" ContentType="image/png"/></Types>')
+        relationships = ''.join(f'<Relationship Id="rIdImage{index}" Type="{R}/image" Target="media/image{index}.png"/>'
+            for index in range(1, len(images) + 1))
+        entries['word/_rels/document.xml.rels'] = entries['word/_rels/document.xml.rels'].replace('</Relationships>', relationships + '</Relationships>')
+        entries.update({f'word/media/image{index}.png': payload for index, payload in enumerate(images, 1)})
     target.parent.mkdir(parents=True, exist_ok=True)
     with ZipFile(target, 'w', compression=ZIP_DEFLATED) as archive:
         for name, value in entries.items():
@@ -259,12 +315,14 @@ def main():
         assert archive.testzip() is None
         restored = ET.fromstring(archive.read('word/document.xml'))
         tables = restored.findall(f'.//{{{W}}}tbl')
-        assert len(tables) == 4, f'Expected four report tables, got {len(tables)}'
+        expected_tables = sum(1 for line in markdown.splitlines() if re.match(r'^\|\s*:?-+:?\s*\|', line))
+        assert len(tables) == expected_tables, f'Expected {expected_tables} report tables, got {len(tables)}'
         text = ''.join(restored.itertext())
-        for required in ['Используемые эндпоинты', 'Преобразование ошибок', 'Ошибка CORS', 'registrationNumber', 'Failed to fetch']:
-            assert required in text, f'Missing report content: {required}'
+        assert title in text
+        for index in range(1, len(images) + 1):
+            assert archive.read(f'word/media/image{index}.png').startswith(b'\x89PNG')
     print(f'Created: {target}')
-    print(f'Checked: valid DOCX ZIP, XML parts, {len(tables)} tables, all three report sections.')
+    print(f'Checked: valid DOCX ZIP, XML parts, {len(tables)} tables, {len(images)} embedded images.')
 
 
 if __name__ == '__main__':

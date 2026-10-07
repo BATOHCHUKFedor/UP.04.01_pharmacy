@@ -25,9 +25,14 @@ class DevTools {
     this.nextId = 0;
     this.pending = new Map();
     this.logs = [];
+    this.network = [];
     socket.addEventListener('message', event => {
       const message = JSON.parse(event.data);
       if (message.method === 'Log.entryAdded') this.logs.push(message.params.entry);
+      if (message.method === 'Network.responseReceived') {
+        const response = message.params.response;
+        this.network.push({ url: response.url, status: response.status });
+      }
       const pending = this.pending.get(message.id);
       if (pending) {
         this.pending.delete(message.id);

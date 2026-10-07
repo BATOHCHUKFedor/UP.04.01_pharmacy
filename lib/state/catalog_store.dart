@@ -30,6 +30,21 @@ class CatalogDetailState {
 }
 
 class CatalogStore extends ChangeNotifier {
+  bool _disposed = false;
+  @override
+  void notifyListeners() {
+    if (!_disposed) super.notifyListeners();
+  }
+
+  @override
+  void dispose() {
+    _disposed = true;
+    for (final kind in EntityKind.values) {
+      cancelList(kind);
+    }
+    super.dispose();
+  }
+
   final CatalogRepository _repository;
   CatalogStore(this._repository);
   final Map<EntityKind, CatalogListState> _lists = {

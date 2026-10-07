@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
 import '../models/catalog_item.dart';
+import '../models/auth_user.dart';
 import '../models/catalog_query.dart';
 import '../models/category.dart';
 import '../models/drug.dart';
@@ -114,11 +115,12 @@ class _CatalogListScreenState extends State<CatalogListScreen> {
     return AppScaffold(
       title: widget.kind.title,
       actions: [
-        IconButton(
-          tooltip: 'Создать',
-          icon: const Icon(Icons.add),
-          onPressed: () => context.push('/${widget.kind.path}/new'),
-        ),
+        if (canAct(context, Permission.write))
+          IconButton(
+            tooltip: 'Создать',
+            icon: const Icon(Icons.add),
+            onPressed: () => context.push('/${widget.kind.path}/new'),
+          ),
       ],
       body: Padding(
         padding: const EdgeInsets.all(12),
@@ -136,7 +138,7 @@ class _CatalogListScreenState extends State<CatalogListScreen> {
                 ],
               ),
             _filters(store),
-            if (state.selected.isNotEmpty)
+            if (canAct(context, Permission.delete) && state.selected.isNotEmpty)
               Padding(
                 padding: const EdgeInsets.symmetric(vertical: 8),
                 child: Row(
@@ -339,17 +341,18 @@ class _CatalogListScreenState extends State<CatalogListScreen> {
                   ),
                 ),
               ],
-              Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Switch(
-                    value: query.includeDeleted,
-                    onChanged: (value) =>
-                        _navigate(query.copyWith(includeDeleted: value)),
-                  ),
-                  const Text('Показывать удалённые'),
-                ],
-              ),
+              if (canAct(context, Permission.write))
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Switch(
+                      value: query.includeDeleted,
+                      onChanged: (value) =>
+                          _navigate(query.copyWith(includeDeleted: value)),
+                    ),
+                    const Text('Показывать удалённые'),
+                  ],
+                ),
               OutlinedButton.icon(
                 onPressed: () {
                   _debounce?.cancel();
@@ -398,6 +401,7 @@ class _CatalogListScreenState extends State<CatalogListScreen> {
   );
 
   Widget _results(CatalogStore store) {
+    final canSelect = canAct(context, Permission.delete);
     final state = store.list(widget.kind);
     final items = state.result.items;
     final fields = _columns(store);
@@ -409,7 +413,9 @@ class _CatalogListScreenState extends State<CatalogListScreen> {
             idOf: (item) => item.id,
             titleOf: (item) => item.title,
             selected: state.selection,
-            onToggleSelect: (id) => store.toggleSelection(widget.kind, id),
+            onToggleSelect: canSelect
+                ? (id) => store.toggleSelection(widget.kind, id)
+                : null,
             isSelectable: (item) => !item.isDeleted,
             isDeleted: (item) => item.isDeleted,
             fields: fields
@@ -429,12 +435,16 @@ class _CatalogListScreenState extends State<CatalogListScreen> {
           items: items,
           idOf: (item) => item.id,
           selected: state.selection,
-          onToggleSelect: (id) => store.toggleSelection(widget.kind, id),
-          onSelectAll: (selected) => store.togglePageSelection(
-            widget.kind,
-            items.where((item) => !item.isDeleted).map((item) => item.id),
-            selected,
-          ),
+          onToggleSelect: canSelect
+              ? (id) => store.toggleSelection(widget.kind, id)
+              : null,
+          onSelectAll: canSelect
+              ? (selected) => store.togglePageSelection(
+                  widget.kind,
+                  items.where((item) => !item.isDeleted).map((item) => item.id),
+                  selected,
+                )
+              : null,
           isSelectable: (item) => !item.isDeleted,
           sortField: widget.query.sortField,
           sortAscending: widget.query.ascending,
@@ -554,30 +564,32 @@ class _CatalogListScreenState extends State<CatalogListScreen> {
       icon: const Icon(Icons.visibility_outlined),
       onPressed: () => context.push('/${widget.kind.path}/${item.id}'),
     ),
-    IconButton(
-      tooltip: 'Изменить',
-      icon: const Icon(Icons.edit_outlined),
-      onPressed: item.isDeleted
-          ? null
-          : () => context.push('/${widget.kind.path}/${item.id}/edit'),
-    ),
-    if (item.isDeleted)
+    if (canAct(context, Permission.write))
+      IconButton(
+        tooltip: 'Изменить',
+        icon: const Icon(Icons.edit_outlined),
+        onPressed: item.isDeleted
+            ? null
+            : () => context.push('/${widget.kind.path}/${item.id}/edit'),
+      ),
+    if (item.isDeleted && canAct(context, Permission.restore))
       IconButton(
         tooltip: 'Восстановить',
         icon: const Icon(Icons.restore),
         onPressed: () => _run(() => store.restore(widget.kind, item.id)),
-      )
-    else
+      ),
+    if (!item.isDeleted && canAct(context, Permission.delete))
       IconButton(
         tooltip: 'Логически удалить',
         icon: const Icon(Icons.delete_outline),
         onPressed: () => _remove(store, item, hard: false),
       ),
-    IconButton(
-      tooltip: 'Удалить навсегда',
-      icon: const Icon(Icons.delete_forever_outlined),
-      onPressed: () => _remove(store, item, hard: true),
-    ),
+    if (canAct(context, Permission.hardDelete))
+      IconButton(
+        tooltip: 'Удалить навсегда',
+        icon: const Icon(Icons.delete_forever_outlined),
+        onPressed: () => _remove(store, item, hard: true),
+      ),
   ];
 
   Future<void> _run(Future<void> Function() action) async {
