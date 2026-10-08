@@ -34,6 +34,17 @@ migrate_working_dir/
 /coverage/
 /.mock-data/
 
+# PocketBase: versioned schema/hooks are committed; binaries and real data are not.
+/backend/pocketbase/pb_data/
+/backend/pocketbase/pb_public/
+/backend/pocketbase/pb_backups/
+/backend/pocketbase/pocketbase.exe
+/backend/pocketbase/pocketbase
+/backend/pocketbase/.env*
+/backend/pocketbase/*.zip
+/backend/pocketbase/CHANGELOG.md
+/backend/pocketbase/LICENSE.md
+
 # Symbolication related
 app.*.symbols
 

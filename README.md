@@ -1,9 +1,39 @@
 # Аптечный каталог — Flutter Web + REST API
 
 Пять разделов: препараты, поставщики, производители, категории и лицензии.
-Текущий этап — ПР5: авторизация, три роли и защита маршрутов. Работа с API из ПР4 сохранена.
+Текущий этап — подключение PocketBase после ПР6. Авторизация, роли и REST-контракт сохранены.
 
-## Запуск
+## PocketBase — новый сервер
+
+Схема, серверные операции и проверка реальной SQLite-базы готовы для локального подключения.
+Версия PocketBase — **0.40.5**. Бинарник и `pb_data` не публикуются в Git.
+
+Первый терминал (если старый процесс PocketBase уже работает, остановите его через Ctrl+C):
+
+```powershell
+Set-Location -LiteralPath 'C:\Users\Asus F15\flutter_projects\pharmacy_project\backend\pocketbase'
+.\pocketbase.exe serve
+```
+
+При запуске автоматически применяются миграции коллекций и однократная загрузка примеров.
+Проверка: http://127.0.0.1:8090/api/pharmacy/__health.
+
+Второй терминал, из корня Flutter-проекта:
+
+```powershell
+flutter run -d chrome --web-port=5555 --dart-define=API_BASE_URL=http://127.0.0.1:8090/api/pharmacy
+```
+
+Зарегистрируйте пользователя в приложении. Для первого администратора откройте панель
+http://127.0.0.1:8090/_/, найдите его в `pharmacy_users` и измените **только** `role` на `admin`.
+Затем выйдите из приложения и войдите снова. Аналогично назначается `pharmacist`.
+Superuser панели не используется для входа в приложение. Старые учебные пароли мок-сервера
+не переносятся; начальная миграция создаёт только каталог, не пользователей.
+
+Подробности: [backend/pocketbase/README.md](backend/pocketbase/README.md).
+Ниже сохранены инструкции предыдущего этапа с Node.js — для прежних тестов и сравнения.
+
+## Предыдущий сервер — Node.js
 
 Нужны Flutter и Node.js 22+. У сервера нет npm-зависимостей.
 Команды выполняются из корня проекта в двух терминалах.
@@ -128,3 +158,47 @@ node tool/verify_web.js
 [docs/pr4-api-report.docx](docs/pr4-api-report.docx) (документ Word).
 Текстовый исходник — [docs/pr4-api-report.md](docs/pr4-api-report.md).
 Предыдущие этапы — [REPORT.md](REPORT.md).
+
+## ПР6: интерфейс и тестирование, без публикации
+
+Веб-интерфейс адаптирован к 360/768/1280/1920 пикселям: нижняя или боковая
+навигация, карточки/таблица, двухколоночные списки, ограничение ширины,
+прокручиваемые фильтры и сообщения. Начальная заставка — `web/index.html`.
+
+Отчёт со снимками: [docs/pr6/pr6-interface-report.docx](docs/pr6/pr6-interface-report.docx).
+Текстовый исходник: [docs/pr6/pr6-interface-report.md](docs/pr6/pr6-interface-report.md).
+Чек-лист будущего итогового отчёта и измерений:
+[docs/pr6/REPORT_CHECKLIST.md](docs/pr6/REPORT_CHECKLIST.md).
+Совместная подготовка Render Free и параметров публикации:
+[docs/pr6/DEPLOYMENT_STEPS.md](docs/pr6/DEPLOYMENT_STEPS.md).
+Будущий backend — PocketBase либо Supabase; договорённости:
+[docs/BACKEND_ROADMAP.md](docs/BACKEND_ROADMAP.md).
+
+Проверка без релизной сборки (8080 должен быть свободен):
+
+```powershell
+flutter run -d web-server --web-port=5555 --dart-define=API_BASE_URL=http://localhost:8080/api
+# В другом терминале; скрипт сам запускает изолированный тестовый API:
+node tool/verify_adaptive.js
+```
+
+Совместный этап публикации начат: Render API настроен; обычная и Wasm
+сборки сохранены и измерены. Сравнение размеров/времени и оптимизация пакета:
+[docs/pr6/BUILD_COMPARISON.md](docs/pr6/BUILD_COMPARISON.md).
+Первый запуск CI/CD и публикация клиента прошли успешно:
+[сайт](https://batohchukfedor.github.io/UP.04.01_pharmacy/).
+Работу входа и внутренних маршрутов проверяем после исправления Origin API.
+Workflow подготовлен: [.github/workflows/pages.yml](.github/workflows/pages.yml).
+Необходимые настройки GitHub и порядок запуска:
+[docs/pr6/GITHUB_PAGES.md](docs/pr6/GITHUB_PAGES.md).
+
+Упаковка готовой обычной release-сборки без отладочных таблиц символов:
+
+```powershell
+node tool/optimize_release.js --input build/web --output build/pr6-builds/optimized
+```
+
+Результат не перезаписывается, исходный каталог не меняется. Для нового запуска
+выберите другой каталог результата внутри build. Локальный просмотр сохранённых
+вариантов: `node tool/serve_release.js` (8000 — обычная, 8001 — Wasm,
+8002 — оптимизированная копия, если создана).

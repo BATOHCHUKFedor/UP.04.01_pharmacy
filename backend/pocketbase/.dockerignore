@@ -1,0 +1,9 @@
+# Allow only application code into the image. Never upload the local database,
+# Windows executable, backups, test fixtures or credentials as build context.
+**
+!Dockerfile
+!.dockerignore
+!pb_hooks/
+!pb_hooks/**
+!pb_migrations/
+!pb_migrations/**
